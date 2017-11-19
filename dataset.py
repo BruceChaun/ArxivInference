@@ -18,6 +18,7 @@ class PaperDataset(Dataset):
 
         db = [(k, {
             'abstract': v['abstract'],
+            'cleaned': [w for w in v['abstract'] if w in self.vocab_imap],
             'authors': [u for u in v['authors'] if u in self.users_imap],
             }) for k, v in db]
         db = [(k, v) for k, v in db if len(v['authors']) > 1]
@@ -28,11 +29,12 @@ class PaperDataset(Dataset):
 
     def get_raw_item(self, i):
         v = self.db[i][1]
-        return v['abstract'], v['authors']
+        return v['abstract'], v['cleaned'], v['authors']
 
     def get_mapped_item(self, i):
-        abstract, authors = self.get_raw_item(i)
-        abstract = [self.vocab_imap[w] + 1 for w in abstract]
+        _, abstract, authors = self.get_raw_item(i)
+        abstract = [self.vocab_imap[w] + 1 for w in abstract
+                    if w in self.vocab_imap]
         authors = [self.users_imap[u] + 1 for u in authors]
         return abstract, authors
 
