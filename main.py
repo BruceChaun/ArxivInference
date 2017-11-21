@@ -1,4 +1,4 @@
-
+import sys
 import pickle
 from dataset import MappedPaperDataset, MappedDataLoader
 import torch as T
@@ -46,7 +46,7 @@ train_dataloader = MappedDataLoader(train_dataset, batch_size=batch_size, num_wo
 valid_dataloader = MappedDataLoader(valid_dataset, batch_size=batch_size, num_workers=2)
 
 
-model = 'bowrank'
+model_name = sys.argv[1]
 
 bestmodel = None
 best_valid_loss = np.inf
@@ -57,22 +57,37 @@ lambda_u = 1e-5
 
 wm = viz.VisdomWindowManager(server='http://log-0', port='8098')
 
-if model == 'bowrank':
+if model_name == 'bowrank':
     embed_size = 20
 
     from bowrank import BOWRanker
     model = BOWRanker(len(vocab), len(users), embed_size)
 
-opt = T.optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0)
+    opt = T.optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0)
+elif model_name == 'tfidfrank':
+    embed_size = 10
+
+    from bowrank import TFIDFRanker
+    from tfidf import TFIDF
+    model = TFIDFRanker(len(vocab), len(users), embed_size)
+    tf_idf = TFIDF(db, train_dataset.vocab_imap, train_dataset.vocab_map, stopword_list)
+
+    opt = T.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-5)
 
 for epoch in range(10000):
     model.train()
-
     train_batches = 0
     train_loss = 0
     for w, u, l, n, v, vs in train_dataloader:
-        loss, reg, reg_u = model.loss(u, w, l, n, v, vs, thres=thres)
+        if model_name == 'bowrank':
+            loss, reg, reg_u = model.loss(u, w, l, n, v, vs, thres=thres)
+        elif model_name == 'tfidfrank':
+            weight = tf_idf.get_tfs(w.data.numpy(), batches * batch_size)
+            weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
+            loss, reg, reg_u = model.loss(u, w, l, n, v, vs, weight, thres=thres)
+
         total_loss = loss + lambda_ * reg + lambda_u * reg_u
+
         opt.zero_grad()
         total_loss.backward()
         opt.step()
@@ -84,8 +99,14 @@ for epoch in range(10000):
     valid_loss = 0
     valid_batches = 0
     for w, u, l, n, v, vs in valid_dataloader:
-        loss, _, _ = model.loss(u, w, l, n, v, vs, thres=thres)
-        loss = loss.data.numpy()
+        if model_name == 'bowrank':
+            loss, _, _ = model.loss(u, w, l, n, v, vs, thres=thres)
+            loss = loss.data.numpy()
+        elif model_name == 'tfidfrank':
+            weight = tf_idf.get_tfs(w.data.numpy(), valid_batches * batch_size)
+            weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
+            loss = np.asscalar(model.loss(u, w, l, n, v, vs, weight, thres=thres).data.numpy())
+
         valid_loss = ((valid_loss * valid_batches) + loss) / (valid_batches + 1)
         valid_batches += 1
 
