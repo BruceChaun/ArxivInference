@@ -44,36 +44,60 @@ valid_dataloader = MappedDataLoader(valid_dataset, batch_size=batch_size)
 test_dataloader = MappedDataLoader(test_dataset, batch_size=batch_size)
 
 
-model = 'bowrank'
+model_name = 'bowrank'
+model_name = 'tfidfrank'
 
 bestmodel = None
 best_valid_loss = np.inf
 
 wm = viz.VisdomWindowManager()
 
-if model == 'bowrank':
+if model_name == 'bowrank':
     embed_size = 10
 
     from bowrank import BOWRanker
     model = BOWRanker(len(vocab), len(users), embed_size)
+
+elif model_name == 'tfidfrank':
+    embed_size = 10
+
+    from bowrank import TFIDFRanker
+    from tfidf import TFIDF
+    model = TFIDFRanker(len(vocab), len(users), embed_size)
+    tf_idf = TFIDF(db, train_dataset.vocab_imap, train_dataset.vocab_map, stopword_list)
 
 opt = T.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-5)
 
 for epoch in range(400):
     train_batches = 0
     train_loss = 0
+    batches = 0
     for w, u, u_p, l in train_dataloader:
-        loss = model.loss(u, u_p, w, l)
+        if model_name == 'bowrank':
+            loss = model.loss(u, u_p, w, l)
+        elif model_name == 'tfidfrank':
+            weight = tf_idf.get_tfs(w.data.numpy(), batches * batch_size)
+            weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
+            loss = model.loss(u, u_p, w, l, weight)
+
         opt.zero_grad()
         loss.backward()
         opt.step()
         loss = np.asscalar(loss.data.numpy())
         train_loss = ((train_loss * train_batches) + loss) / (train_batches + 1)
 
+        batches += 1
+
     valid_loss = 0
     valid_batches = 0
     for w, u, u_p, l in valid_dataloader:
-        loss = np.asscalar(model.loss(u, u_p, w, l).data.numpy())
+        if model_name == 'bowrank':
+            loss = np.asscalar(model.loss(u, u_p, w, l).data.numpy())
+        elif model_name == 'tfidfrank':
+            weight = tf_idf.get_tfs(w.data.numpy(), valid_batches * batch_size)
+            weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
+            loss = np.asscalar(model.loss(u, u_p, w, l, weight).data.numpy())
+
         valid_loss = ((valid_loss * valid_batches) + loss) / (valid_batches + 1)
         valid_batches += 1
     wm.append_scalar(

@@ -68,7 +68,7 @@ class CharMappedPaperDataset(PaperDataset):
 
 MappedDataLoader = partial(
         DataLoader,
-        shuffle=True,
+        shuffle=False,
         collate_fn=collate_mapped,
         drop_last=True,
         )
