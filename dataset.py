@@ -23,8 +23,14 @@ class PaperDataset(Dataset):
             }) for k, v in db]
         db = [(k, v) for k, v in db if len(v['authors']) > 1]
         self.db = db
+        self.max_doc_len = max(len(v['abstract']) for k, v in self.db)
+        self.max_cleaned_doc_len = max(len(v['cleaned']) for k, v in self.db)
 
     def __len__(self):
+        return len(self.db)
+
+    @property
+    def db_len(self):
         return len(self.db)
 
     def get_raw_item(self, i):
@@ -39,28 +45,40 @@ class PaperDataset(Dataset):
         return abstract, authors
 
 class MappedPaperDataset(PaperDataset):
+    def __init__(self, db, vocab, users):
+        PaperDataset.__init__(self, db, vocab, users)
+
     def __getitem__(self, i):
         abstract, authors = self.get_mapped_item(i)
-        author_pos = np.asscalar(np.random.choice(authors))
-        author_neg = np.random.choice(len(self.users_map))
-        return abstract, author_pos, author_neg
+        return abstract, authors
 
 def collate_mapped(samples):
-    abstract, author_pos, author_neg = [list(x) for x in zip(*samples)]
-    max_word_len = max(len(a) for a in abstract)
-    lengths = [len(a) for a in abstract]
-    for i in range(len(abstract)):
-        abstract[i] = np.pad(
-                abstract[i],
-                (0, max_word_len - len(abstract[i])),
-                'constant',
-                constant_values=0
-                )
+    abstract, authors = [list(x) for x in zip(*samples)]
+    vocab = [list(set(a)) for a in abstract]
+
+    def collate_documents(docs):
+        max_word_len = max(len(a) for a in docs)
+        lengths = [len(a) for a in docs]
+        for i in range(len(docs)):
+            docs[i] = np.pad(
+                    docs[i],
+                    (0, max_word_len - len(docs[i])),
+                    'constant',
+                    constant_values=0
+                    )
+        return lengths
+
+    lengths = collate_documents(abstract)
+    n_authors = collate_documents(authors)
+    vocab_size = collate_documents(vocab)
 
     return (T.autograd.Variable(T.LongTensor(np.array(abstract))),
-            T.autograd.Variable(T.LongTensor(np.array(author_pos))),
-            T.autograd.Variable(T.LongTensor(np.array(author_neg))),
-            T.autograd.Variable(T.LongTensor(np.array(lengths))))
+            T.autograd.Variable(T.LongTensor(np.array(authors))),
+            T.autograd.Variable(T.LongTensor(np.array(lengths))),
+            T.autograd.Variable(T.LongTensor(np.array(n_authors))),
+            T.autograd.Variable(T.LongTensor(np.array(vocab))),
+            T.autograd.Variable(T.LongTensor(np.array(vocab_size))),
+            )
 
 class CharMappedPaperDataset(PaperDataset):
     def __getitem__(self, i):
