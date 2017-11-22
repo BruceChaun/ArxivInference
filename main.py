@@ -63,7 +63,7 @@ if model_name == 'bowrank':
     from bowrank import BOWRanker
     model = BOWRanker(len(vocab), len(users), embed_size)
 
-    opt = T.optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0)
+    opt = T.optim.Adamax(model.parameters())
 elif model_name == 'tfidfrank':
     embed_size = 10
 
@@ -117,12 +117,6 @@ for epoch in range(10000):
                 legend=['train', 'validation']
                 ),
             )
-
-    '''
-    for pg in opt.param_groups:
-        pg['lr'] *= 0.999
-        pg['lr'] = max(pg['lr'], 1e-4)
-    '''
     if (epoch + 1) % 50 == 0:
         T.save(bestmodel.U.weight.data.numpy(), 'U.p')
         T.save(bestmodel.W.weight.data.numpy(), 'W.p')
