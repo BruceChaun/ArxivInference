@@ -64,7 +64,7 @@ if model_name == 'bowrank':
     from bowrank import BOWRanker
     model = BOWRanker(len(vocab), len(users), embed_size)
 
-    opt = T.optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0)
+    opt = T.optim.Adamax(model.parameters())
 elif model_name == 'tfidfrank':
     embed_size = 10
 

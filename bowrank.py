@@ -10,7 +10,6 @@ class BOWRanker(nn.Module):
         self.n_users = n_users
         self.U = nn.Embedding(n_users + 1, embed_size, padding_idx=0)
         self.W = nn.Embedding(n_vocab + 1, embed_size, padding_idx=0)
-        self.bU = nn.Parameter(T.zeros(1, n_users))
         init.normal(self.U.weight.data[1:], 0, 0.1)
         init.normal(self.W.weight.data[1:], 0, 0.1)
 
