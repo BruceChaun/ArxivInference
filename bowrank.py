@@ -2,6 +2,7 @@ import torch as T
 from torch import nn
 import torch.nn.functional as F
 from torch.nn import init
+import os
 
 class BOWRanker(nn.Module):
     def __init__(self, n_vocab, n_users, embed_size):
@@ -9,6 +10,7 @@ class BOWRanker(nn.Module):
         self.n_users = n_users
         self.U = nn.Embedding(n_users + 1, embed_size, padding_idx=0)
         self.W = nn.Embedding(n_vocab + 1, embed_size, padding_idx=0)
+        self.bU = nn.Parameter(T.zeros(1, n_users))
         init.normal(self.U.weight.data[1:], 0, 0.1)
         init.normal(self.W.weight.data[1:], 0, 0.1)
 
@@ -29,21 +31,34 @@ class BOWRanker(nn.Module):
         w = self.W(wi)
 
         u_pos_sum = u.sum(1)
-        u_neg_sum = self.U.weight.sum(0, keepdim=True) - u_pos_sum
+        u_neg_sum = self.U.weight[1:].sum(0, keepdim=True) - u_pos_sum
         u_pos_avg = u_pos_sum / n.float().unsqueeze(1)
         u_neg_avg = u_neg_sum / (self.n_users - n.float()).unsqueeze(1)
         w_avg = w.sum(1) / l.float().unsqueeze(1)
-        return ((u_pos_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1),
-                (u_neg_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1))
 
-    def loss(self, ui, wi, l, n, vi, vs, thres=1):
+        s_pos = (u_pos_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1)
+        s_neg = (u_neg_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1)
+
+        '''
+        bU = T.cat([T.autograd.Variable(T.zeros(1, 1)), self.bU], 1)
+        bu_pos_sum = bU.expand(batch_size, self.n_users + 1).gather(ui, 1).sum(1)
+        bu_neg_sum = bU.sum(1) - bu_pos_sum
+        bu_pos_avg = bu_pos_sum / n.float()
+        bu_neg_avg = bu_neg_sum / (self.n_users - n.float())
+        '''
+        return s_pos, s_neg
+
+    def loss(self, ui, wi, wi_p, l, l_p, n, vi, vs, thres=1):
         s, s_p = self.forward(ui, wi, l, n)
+        s_p2, _ = self.forward(ui, wi_p, l_p, n)
 
         w = self.W(vi)
         w_norms = (self.W.weight ** 2).sum()
         u_norms = (self.U.weight ** 2).sum()
 
-        return ((thres + s_p - s).clamp(min=0).mean(), w_norms, u_norms)
+        return ((thres + s_p - s).clamp(min=0).mean() +
+                (thres + s_p2 - s).clamp(min=0).mean(),
+                w_norms, u_norms)
 
 
 class TFIDFRanker(BOWRanker):

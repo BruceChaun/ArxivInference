@@ -47,6 +47,7 @@ valid_dataloader = MappedDataLoader(valid_dataset, batch_size=batch_size, num_wo
 
 
 model_name = sys.argv[1]
+prefix = sys.argv[2]
 
 bestmodel = None
 best_valid_loss = np.inf
@@ -55,7 +56,7 @@ thres = 1
 lambda_ = 1e-5
 lambda_u = 1e-5
 
-wm = viz.VisdomWindowManager(server='http://log-0', port='8098')
+wm = viz.VisdomWindowManager(server='http://log-0', port='8098', env=prefix)
 
 if model_name == 'bowrank':
     embed_size = 20
@@ -78,9 +79,9 @@ for epoch in range(10000):
     model.train()
     train_batches = 0
     train_loss = 0
-    for w, u, l, n, v, vs in train_dataloader:
+    for w, w_p, u, l, l_p, n, v, vs in train_dataloader:
         if model_name == 'bowrank':
-            loss, reg, reg_u = model.loss(u, w, l, n, v, vs, thres=thres)
+            loss, reg, reg_u = model.loss(u, w, w_p, l, l_p, n, v, vs, thres=thres)
         elif model_name == 'tfidfrank':
             weight = tf_idf.get_tfs(w.data.numpy(), batches * batch_size)
             weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
@@ -98,9 +99,9 @@ for epoch in range(10000):
 
     valid_loss = 0
     valid_batches = 0
-    for w, u, l, n, v, vs in valid_dataloader:
+    for w, w_p, u, l, l_p, n, v, vs in valid_dataloader:
         if model_name == 'bowrank':
-            loss, _, _ = model.loss(u, w, l, n, v, vs, thres=thres)
+            loss, _, _ = model.loss(u, w, w_p, l, l_p, n, v, vs, thres=thres)
             loss = loss.data.numpy()
         elif model_name == 'tfidfrank':
             weight = tf_idf.get_tfs(w.data.numpy(), valid_batches * batch_size)
@@ -123,12 +124,11 @@ for epoch in range(10000):
         pg['lr'] *= 0.999
         pg['lr'] = max(pg['lr'], 1e-4)
     '''
-    if (epoch + 1) % 50 == 0:
-        T.save(bestmodel.U.weight.data.numpy(), 'U.p')
-        T.save(bestmodel.W.weight.data.numpy(), 'W.p')
-        T.save(vocab, 'vocab-selected.p')
-        T.save(users, 'users-selected.p')
 
     if valid_loss < best_valid_loss:
         best_valid_loss = valid_loss
         bestmodel = copy.deepcopy(model)
+        T.save(bestmodel.U.weight.data.numpy(), '%s-U.p' % prefix)
+        T.save(bestmodel.W.weight.data.numpy(), '%s-W.p' % prefix)
+        T.save(vocab, '%s-vocab-selected.p' % prefix)
+        T.save(users, '%s-users-selected.p' % prefix)

@@ -44,16 +44,22 @@ class PaperDataset(Dataset):
         authors = [self.users_imap[u] + 1 for u in authors]
         return abstract, authors
 
+    def translate(self, abstract, authors):
+        abstract = [self.vocab_map[w - 1] for w in abstract]
+        authors = [self.users_map[u - 1] for u in authors]
+        return abstract, authors
+
 class MappedPaperDataset(PaperDataset):
     def __init__(self, db, vocab, users):
         PaperDataset.__init__(self, db, vocab, users)
 
     def __getitem__(self, i):
         abstract, authors = self.get_mapped_item(i)
-        return abstract, authors
+        abstract_neg, _ = self.get_mapped_item(np.random.choice(len(self)))
+        return abstract, authors, abstract_neg
 
 def collate_mapped(samples):
-    abstract, authors = [list(x) for x in zip(*samples)]
+    abstract, authors, abstract_neg = [list(x) for x in zip(*samples)]
     vocab = [list(set(a)) for a in abstract]
 
     def collate_documents(docs):
@@ -69,12 +75,15 @@ def collate_mapped(samples):
         return lengths
 
     lengths = collate_documents(abstract)
+    lengths_neg = collate_documents(abstract_neg)
     n_authors = collate_documents(authors)
     vocab_size = collate_documents(vocab)
 
     return (T.autograd.Variable(T.LongTensor(np.array(abstract))),
+            T.autograd.Variable(T.LongTensor(np.array(abstract_neg))),
             T.autograd.Variable(T.LongTensor(np.array(authors))),
             T.autograd.Variable(T.LongTensor(np.array(lengths))),
+            T.autograd.Variable(T.LongTensor(np.array(lengths_neg))),
             T.autograd.Variable(T.LongTensor(np.array(n_authors))),
             T.autograd.Variable(T.LongTensor(np.array(vocab))),
             T.autograd.Variable(T.LongTensor(np.array(vocab_size))),
