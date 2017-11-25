@@ -10,8 +10,6 @@ class BOWRanker(nn.Module):
         self.n_users = n_users
         self.U = nn.Embedding(n_users + 1, embed_size, padding_idx=0)
         self.W = nn.Embedding(n_vocab + 1, embed_size, padding_idx=0)
-        init.normal(self.U.weight.data[1:], 0, 0.1)
-        init.normal(self.W.weight.data[1:], 0, 0.1)
 
     def forward(self, ui, wi, l, n):
         '''
@@ -47,12 +45,14 @@ class BOWRanker(nn.Module):
         '''
         return s_pos, s_neg
 
-    def loss(self, ui, wi, wi_p, l, l_p, n, vi, vs, thres=1):
+    def loss(self, ui, wi, wi_p, l, l_p, n, vi, vs, thres=1, rho=0.1):
         s, s_p = self.forward(ui, wi, l, n)
         s_p2, _ = self.forward(ui, wi_p, l_p, n)
 
         w = self.W(vi)
         w_norms = (self.W.weight ** 2).sum()
+        if rho != 0:
+            w_norms += rho * w.norm(2, 2).sum()
         u_norms = (self.U.weight ** 2).sum()
 
         return ((thres + s_p - s).clamp(min=0).mean() +
