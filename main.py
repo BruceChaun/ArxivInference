@@ -64,7 +64,7 @@ best_valid_loss = np.inf
 thres = 1
 lambda_ = 1e-5
 lambda_u = 1e-5
-rho = 0        # Controls specificity, non-negative
+rho = float(sys.argv[3]) if len(sys.argv) > 3 else 0        # Specificity
 
 wm = viz.VisdomWindowManager(server='http://log-0', port='8098', env=prefix)
 
