@@ -1,56 +1,15 @@
 import sys
-import pickle
-from dataset import MappedPaperDataset, MappedDataLoader
+from dataset import *
 import torch as T
 import viz
 import numpy as np
-from collections import OrderedDict, Counter
 import copy
-from nltk.corpus import stopwords
 
 def anynan(v):
     s = (v.data != v.data).long().sum()
     return s != 0
 
 batch_size = 256
-stopword_list = stopwords.words('english') + [
-        "n't",
-        "'ll",
-        "'s",
-        "'d",
-        ]
-
-with open('newdb.p', 'rb') as f:
-    db = pickle.load(f)
-
-db = list(db.items())
-db_len = len(db)
-train_split = db_len * 4 // 5
-valid_split = db_len // 10
-train_db = db[:train_split]
-valid_db = db[train_split:train_split+valid_split]
-test_db = db[train_split+valid_split:]
-
-vocab = Counter()
-users = Counter()
-for k, v in train_db:
-    vocab.update(v['abstract'])
-    users.update(v['authors'])
-
-vocab = OrderedDict(
-        (w, c) for w, c in vocab.items()
-        if (w not in stopword_list and len(w) > 1))
-users = OrderedDict((u, c) for u, c in users.items() if c >= 3)
-
-train_dataset = MappedPaperDataset(train_db, vocab, users)
-valid_dataset = MappedPaperDataset(valid_db, vocab, users)
-test_dataset = MappedPaperDataset(test_db, vocab, users)
-
-print('Vocabulary size:', len(vocab))
-print('Number of authors:', len(users))
-print('Training set size:', len(train_dataset))
-print('Validation set size:', len(valid_dataset))
-print('Test set size:', len(test_dataset))
 
 train_dataloader = MappedDataLoader(train_dataset, batch_size=batch_size, num_workers=2)
 valid_dataloader = MappedDataLoader(valid_dataset, batch_size=batch_size, num_workers=2)
@@ -65,6 +24,7 @@ thres = 1
 lambda_ = 1e-5
 lambda_u = 1e-5
 rho = float(sys.argv[3]) if len(sys.argv) > 3 else 0        # Specificity
+order = int(sys.argv[4]) if len(sys.argv) > 4 else 2        # Also specificity
 
 wm = viz.VisdomWindowManager(server='http://log-0', port='8098', env=prefix)
 

@@ -52,7 +52,7 @@ class BOWRanker(nn.Module):
         w = self.W(vi)
         w_norms = (self.W.weight ** 2).sum()
         if rho != 0:
-            w_norms += rho * w.norm(2, 2).sum()
+            w_norms += rho * (w.norm(2, 2) ** order).sum()
         u_norms = (self.U.weight ** 2).sum()
 
         return ((thres + s_p - s).clamp(min=0).mean() +

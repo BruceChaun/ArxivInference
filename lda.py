@@ -4,6 +4,7 @@ from nltk.corpus import stopwords
 from collections import OrderedDict, Counter
 import logging
 from gensim import models, corpora
+import torch as T       # only for saving
 
 N_TOPICS = 20
 
@@ -78,4 +79,3 @@ lda = models.AuthorTopicModel(
         author2doc=author2doc,
         id2word=id2word,
         )
-lda.save('lda.mdl')
