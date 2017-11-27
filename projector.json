@@ -1,0 +1,13 @@
+{
+  "embeddings": [
+    {
+      "tensorName": "My tensor",
+      "tensorShape": [
+        1000,
+        50
+      ],
+      "tensorPath": "https://raw.githubusercontent.com/BruceChaun/ArxivInference/master/embedding.tsv",
+      "metadataPath": "https://raw.githubusercontent.com/BruceChaun/ArxivInference/master/users.tsv"
+    }
+  ]
+}
