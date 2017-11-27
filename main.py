@@ -1,3 +1,5 @@
+# Usage:
+# python3 main.py <pickle-file> bowrank <prefix> [<rho>] [<order>]
 import sys
 from dataset import *
 import torch as T
@@ -9,13 +11,13 @@ def anynan(v):
     s = (v.data != v.data).long().sum()
     return s != 0
 
-batch_size = 256
+batch_size = 32
 
-train_dataloader = MappedDataLoader(train_dataset, batch_size=batch_size, num_workers=2)
-valid_dataloader = MappedDataLoader(valid_dataset, batch_size=batch_size, num_workers=2)
+train_dataloader = BOWDataLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
+valid_dataloader = BOWDataLoader(valid_dataset, batch_size=batch_size, num_workers=0)
 
-model_name = sys.argv[1]
-prefix = sys.argv[2]
+model_name = sys.argv[2]
+prefix = sys.argv[3]
 
 bestmodel = None
 best_valid_loss = np.inf
@@ -23,8 +25,8 @@ best_valid_loss = np.inf
 thres = 1
 lambda_ = 1e-5
 lambda_u = 1e-5
-rho = float(sys.argv[3]) if len(sys.argv) > 3 else 0        # Specificity
-order = int(sys.argv[4]) if len(sys.argv) > 4 else 2        # Also specificity
+rho = float(sys.argv[4]) if len(sys.argv) > 3 else 0        # Specificity
+order = int(sys.argv[5]) if len(sys.argv) > 4 else 2        # Also specificity
 
 wm = viz.VisdomWindowManager(server='http://log-0', port='8098', env=prefix)
 
@@ -49,9 +51,11 @@ for epoch in range(10000):
     model.train()
     train_batches = 0
     train_loss = 0
-    for w, w_p, u, l, l_p, n, v, vs in train_dataloader:
+    print('Epoch', epoch)
+
+    for ui, uo, wi, wo, wi_p, wo_p in train_dataloader:
         if model_name == 'bowrank':
-            loss, reg, reg_u = model.loss(u, w, w_p, l, l_p, n, v, vs, thres=thres, rho=rho)
+            loss, reg, reg_u = model.loss(ui, uo, wi, wo, wi_p, wo_p, thres=thres, rho=rho, order=order)
         elif model_name == 'tfidfrank':
             weight = tf_idf.get_tfs(w.data.numpy(), batches * batch_size)
             weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
@@ -68,14 +72,18 @@ for epoch in range(10000):
         opt.step()
         loss = np.asscalar(loss.data.numpy())
         train_loss = ((train_loss * train_batches) + loss) / (train_batches + 1)
+        train_batches += 1
+
+        if train_batches % 1000 == 0:
+            print('Train %d/%d' % (train_batches, len(train_dataloader)))
 
     model.eval()
 
     valid_loss = 0
     valid_batches = 0
-    for w, w_p, u, l, l_p, n, v, vs in valid_dataloader:
+    for ui, uo, wi, wo, wi_p, wo_p in valid_dataloader:
         if model_name == 'bowrank':
-            loss, _, _ = model.loss(u, w, w_p, l, l_p, n, v, vs, thres=thres, rho=rho)
+            loss, _, _ = model.loss(ui, uo, wi, wo, wi_p, wo_p, thres=thres, rho=rho, order=order)
             loss = loss.data.numpy()
         elif model_name == 'tfidfrank':
             weight = tf_idf.get_tfs(w.data.numpy(), valid_batches * batch_size)
@@ -84,6 +92,10 @@ for epoch in range(10000):
 
         valid_loss = ((valid_loss * valid_batches) + loss) / (valid_batches + 1)
         valid_batches += 1
+        if valid_batches % 1000 == 0:
+            print('Valid %d/%d' % (valid_batches, len(train_dataloader)))
+
+    print('Train loss %f  Valid loss %f' % (train_loss, valid_loss))
 
     wm.append_scalar(
             'loss',

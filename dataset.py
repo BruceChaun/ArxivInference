@@ -5,6 +5,7 @@ from functools import partial
 from nltk.corpus import stopwords
 import pickle
 from collections import OrderedDict, Counter
+import sys
 
 class PaperDataset(Dataset):
     def __init__(self, db, vocab, users):
@@ -61,9 +62,26 @@ class MappedPaperDataset(PaperDataset):
         abstract_neg, _ = self.get_mapped_item(np.random.choice(len(self)))
         return abstract, authors, abstract_neg
 
-def collate_mapped(samples):
-    abstract, authors, abstract_neg = [list(x) for x in zip(*samples)]
-    vocab = [list(set(a)) for a in abstract]
+class BOWPaperDataset(MappedPaperDataset):
+    def __init__(self, db, vocab, users):
+        MappedPaperDataset.__init__(self, db, vocab, users)
+        for k, v in self.db:
+            v['cleaned-bow'] = Counter([self.vocab_imap[w] + 1 for w in v['cleaned']])
+            v['author-bow'] = Counter([self.users_imap[u] + 1 for u in v['authors']])
+
+    def get_mapped_item(self, i):
+        v = self.db[i][1]
+        bow = v['cleaned-bow']
+        author_bow = v['author-bow']
+        words, word_occs = zip(*bow.items())
+        authors, author_occs = zip(*author_bow.items())
+        return (words, word_occs), (authors, author_occs)
+
+def collate_bow(samples):
+    words, authors, words_neg = [list(x) for x in zip(*samples)]
+    wi, wo = [list(x) for x in zip(*words)]
+    ui, uo = [list(x) for x in zip(*authors)]
+    wi_p, wo_p = [list(x) for x in zip(*words_neg)]
 
     def collate_documents(docs):
         max_word_len = max(len(a) for a in docs)
@@ -77,25 +95,25 @@ def collate_mapped(samples):
                     )
         return lengths
 
-    lengths = collate_documents(abstract)
-    lengths_neg = collate_documents(abstract_neg)
-    n_authors = collate_documents(authors)
-    vocab_size = collate_documents(vocab)
+    collate_documents(ui)
+    collate_documents(uo)
+    collate_documents(wi)
+    collate_documents(wo)
+    collate_documents(wi_p)
+    collate_documents(wo_p)
 
-    return (T.autograd.Variable(T.LongTensor(np.array(abstract))),
-            T.autograd.Variable(T.LongTensor(np.array(abstract_neg))),
-            T.autograd.Variable(T.LongTensor(np.array(authors))),
-            T.autograd.Variable(T.LongTensor(np.array(lengths))),
-            T.autograd.Variable(T.LongTensor(np.array(lengths_neg))),
-            T.autograd.Variable(T.LongTensor(np.array(n_authors))),
-            T.autograd.Variable(T.LongTensor(np.array(vocab))),
-            T.autograd.Variable(T.LongTensor(np.array(vocab_size))),
+    return (T.autograd.Variable(T.LongTensor(np.array(ui))),
+            T.autograd.Variable(T.LongTensor(np.array(uo))),
+            T.autograd.Variable(T.LongTensor(np.array(wi))),
+            T.autograd.Variable(T.LongTensor(np.array(wo))),
+            T.autograd.Variable(T.LongTensor(np.array(wi_p))),
+            T.autograd.Variable(T.LongTensor(np.array(wo_p))),
             )
 
-MappedDataLoader = partial(
+BOWDataLoader = partial(
         DataLoader,
         shuffle=False,
-        collate_fn=collate_mapped,
+        collate_fn=collate_bow,
         drop_last=True,
         )
 
@@ -106,7 +124,7 @@ stopword_list = stopwords.words('english') + [
         "'d",
         ]
 
-with open('newdb.p', 'rb') as f:
+with open(sys.argv[1], 'rb') as f:
     db = pickle.load(f)
 
 db = list(db.items())
@@ -128,9 +146,9 @@ vocab = OrderedDict(
         if (w not in stopword_list and len(w) > 1))
 users = OrderedDict((u, c) for u, c in users.items() if c >= 3)
 
-train_dataset = MappedPaperDataset(train_db, vocab, users)
-valid_dataset = MappedPaperDataset(valid_db, vocab, users)
-test_dataset = MappedPaperDataset(test_db, vocab, users)
+train_dataset = BOWPaperDataset(train_db, vocab, users)
+valid_dataset = BOWPaperDataset(valid_db, vocab, users)
+test_dataset = BOWPaperDataset(test_db, vocab, users)
 
 print('Vocabulary size:', len(vocab))
 print('Number of authors:', len(users))

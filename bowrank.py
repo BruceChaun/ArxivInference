@@ -11,27 +11,28 @@ class BOWRanker(nn.Module):
         self.U = nn.Embedding(n_users + 1, embed_size, padding_idx=0)
         self.W = nn.Embedding(n_vocab + 1, embed_size, padding_idx=0)
 
-    def forward(self, ui, wi, l, n):
+    def forward(self, ui, uo, wi, wo):
         '''
-        ui: user indices
-            (batch_size, n_users) LongTensor
+        ui: user BOW
+            (batch_size, n_users + 1) LongTensor
         wi: word indices
-            (batch_size, max_len) LongTensor
+            (batch_size, n_vocab + 1) LongTensor
         l: document length
             (batch_size,) LongTensor
         '''
-        if ui.dim() == 1:
-            ui = ui.unsqueeze(1)
         batch_size = ui.size()[0]
+        uo = uo.float()
+        wo = wo.float()
 
-        u = self.U(ui)
-        w = self.W(wi)
+        u = self.U(ui) * uo.unsqueeze(2)
+        w = self.W(wi) * wo.unsqueeze(2)
+        n = uo.sum(1, keepdim=True)
 
         u_pos_sum = u.sum(1)
         u_neg_sum = self.U.weight[1:].sum(0, keepdim=True) - u_pos_sum
-        u_pos_avg = u_pos_sum / n.float().unsqueeze(1)
-        u_neg_avg = u_neg_sum / (self.n_users - n.float()).unsqueeze(1)
-        w_avg = w.sum(1) / l.float().unsqueeze(1)
+        u_pos_avg = u_pos_sum / n
+        u_neg_avg = u_neg_sum / (self.n_users - n)
+        w_avg = w.sum(1) / wo.sum(1, keepdim=True)
 
         s_pos = (u_pos_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1)
         s_neg = (u_neg_avg.unsqueeze(1) @ w_avg.unsqueeze(2)).view(-1)
@@ -45,14 +46,14 @@ class BOWRanker(nn.Module):
         '''
         return s_pos, s_neg
 
-    def loss(self, ui, wi, wi_p, l, l_p, n, vi, vs, thres=1, rho=0.1):
-        s, s_p = self.forward(ui, wi, l, n)
-        s_p2, _ = self.forward(ui, wi_p, l_p, n)
+    def loss(self, ui, uo, wi, wo, wi_p, wo_p, thres=1, rho=0.1, order=2):
+        s, s_p = self.forward(ui, uo, wi, wo)
+        s_p2, _ = self.forward(ui, uo, wi_p, wo_p)
 
-        w = self.W(vi)
+        w = self.W(wi).norm(2, 2) ** order
         w_norms = (self.W.weight ** 2).sum()
         if rho != 0:
-            w_norms += rho * (w.norm(2, 2) ** order).sum()
+            w_norms += rho * w.sum()
         u_norms = (self.U.weight ** 2).sum()
 
         return ((thres + s_p - s).clamp(min=0).mean() +
