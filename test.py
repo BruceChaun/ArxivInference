@@ -21,6 +21,7 @@ users = T.load('%s-users-selected.p' % prefix)
 with open(sys.argv[1], 'rb') as f:
     db = pickle.load(f)
 
+wordcounts = vocab
 vocab = list(vocab.keys())
 usercounts = users
 users = list(users.keys())
@@ -52,6 +53,19 @@ while True:
     inp = input('> ')
     if inp == 'q':
         break
+    elif inp[0] == 'r':
+        fW = open('W.tsv', 'w')
+        inps = inp.split(' ', 1)
+        cmin = 0 if len(inps) == 1 else int(inps[1])
+        print('Tabulating all words with >%d occurrences...' % cmin)
+        fwords = open('words.tsv', 'w')
+        for word, w in zip(vocab, W[1:]):
+            if wordcounts[word] > cmin:
+                fW.write('\t'.join(str(x) for x in w) + '\n')
+                fwords.write(word + '\n')
+        fW.close()
+        fwords.close()
+        continue
     elif inp[0] == 't':
         fU = open('U.tsv', 'w')
         inps = inp.split(' ', 1)
@@ -70,6 +84,7 @@ while True:
         print('\tusers.tsv.  If c is provided, only tabulate the authors')
         print('\tthat appeared more than c times.  The files can be then')
         print('\tloaded into Tensorflow Embedding Projector.')
+        print('r [c]\tTabulate the words.')
         print('u au\tDisplay the top-ranked words corresponding to the')
         print('\tauthor <au>, as well as the author embedding and norm.')
         print('w wd\tDisplay the word embedding and norm of <wd>.')
