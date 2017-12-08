@@ -25,10 +25,10 @@ best_valid_loss = np.inf
 thres = 1
 lambda_ = 1e-5
 lambda_u = 1e-5
-rho = float(sys.argv[4]) if len(sys.argv) > 3 else 0        # Specificity
-order = int(sys.argv[5]) if len(sys.argv) > 4 else 2        # Also specificity
+rho = float(sys.argv[4]) if len(sys.argv) > 4 else 0        # Specificity
+order = int(sys.argv[5]) if len(sys.argv) > 5 else 2        # Also specificity
 
-wm = viz.VisdomWindowManager(server='http://log-0', port='8098', env=prefix)
+wm = viz.VisdomWindowManager(server='http://log-1', port='8098', env=prefix)
 
 if model_name == 'bowrank':
     embed_size = 20
@@ -47,13 +47,27 @@ elif model_name == 'tfidfrank':
 
     opt = T.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-5)
 
-for epoch in range(10000):
+
+cuda = T.cuda.is_available()
+if cuda:
+    model.cuda()
+
+
+for epoch in range(1000):
     model.train()
     train_batches = 0
     train_loss = 0
     print('Epoch', epoch)
 
     for ui, uo, wi, wo, wi_p, wo_p in train_dataloader:
+        if cuda:
+            ui = ui.cuda()
+            uo = uo.cuda()
+            wi = wi.cuda()
+            wo = wo.cuda()
+            wi_p = wi_p.cuda()
+            wo_p = wo_p.cuda()
+
         if model_name == 'bowrank':
             loss, reg, reg_u = model.loss(ui, uo, wi, wo, wi_p, wo_p, thres=thres, rho=rho, order=order)
         elif model_name == 'tfidfrank':
@@ -70,7 +84,7 @@ for epoch in range(10000):
             if p.grad is not None:
                 assert not anynan(p.grad)
         opt.step()
-        loss = np.asscalar(loss.data.numpy())
+        loss = np.asscalar(loss.data.cpu().numpy())
         train_loss = ((train_loss * train_batches) + loss) / (train_batches + 1)
         train_batches += 1
 
@@ -82,9 +96,17 @@ for epoch in range(10000):
     valid_loss = 0
     valid_batches = 0
     for ui, uo, wi, wo, wi_p, wo_p in valid_dataloader:
+        if cuda:
+            ui = ui.cuda()
+            uo = uo.cuda()
+            wi = wi.cuda()
+            wo = wo.cuda()
+            wi_p = wi_p.cuda()
+            wo_p = wo_p.cuda()
+
         if model_name == 'bowrank':
             loss, _, _ = model.loss(ui, uo, wi, wo, wi_p, wo_p, thres=thres, rho=rho, order=order)
-            loss = loss.data.numpy()
+            loss = loss.data.cpu().numpy()
         elif model_name == 'tfidfrank':
             weight = tf_idf.get_tfs(w.data.numpy(), valid_batches * batch_size)
             weight = T.autograd.Variable(T.Tensor(weight)).unsqueeze(1)
@@ -114,7 +136,7 @@ for epoch in range(10000):
     if valid_loss < best_valid_loss:
         best_valid_loss = valid_loss
         bestmodel = copy.deepcopy(model)
-        T.save(bestmodel.U.weight.data.numpy(), '%s-U.p' % prefix)
-        T.save(bestmodel.W.weight.data.numpy(), '%s-W.p' % prefix)
+        T.save(bestmodel.U.weight.data.cpu().numpy(), '%s-U.p' % prefix)
+        T.save(bestmodel.W.weight.data.cpu().numpy(), '%s-W.p' % prefix)
         T.save(vocab, '%s-vocab-selected.p' % prefix)
         T.save(users, '%s-users-selected.p' % prefix)

@@ -25,7 +25,7 @@ class PaperDataset(Dataset):
             'cleaned': [w for w in v['abstract'] if w in self.vocab_imap],
             'authors': [u for u in v['authors'] if u in self.users_imap],
             }) for k, v in db]
-        db = [(k, v) for k, v in db if len(v['authors']) >= 1]
+        db = [(k, v) for k, v in db if len(v['authors']) >= 1 and len(v['cleaned']) > 0]
         self.db = db
         self.max_doc_len = max(len(v['abstract']) for k, v in self.db)
         self.max_cleaned_doc_len = max(len(v['cleaned']) for k, v in self.db)
